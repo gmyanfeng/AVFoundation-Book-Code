@@ -43,6 +43,17 @@
         AVAudioPlayer *drumsPlayer = [self playerForFile:@"drums"];
         
         _players = @[guitarPlayer,bassPlayer,drumsPlayer];
+        
+        NSNotificationCenter *nsnc = [NSNotificationCenter defaultCenter];
+        [nsnc addObserver:self
+                 selector:@selector(handleInterruption:)
+                     name:AVAudioSessionInterruptionNotification
+                   object:[AVAudioSession sharedInstance]];  //播放中断通知
+        
+        [nsnc addObserver:self
+                 selector:@selector(handleRouteChange:)
+                     name:AVAudioSessionRouteChangeNotification
+                   object:[AVAudioSession sharedInstance]];  //播放路线的变换
     }
     return  self;
 }
@@ -57,7 +68,7 @@
         player.enableRate = YES;
         [player prepareToPlay];
     }else{
-        NSLog(@"Error %@",[error description]);
+        NSLog(@"Error creating player: %@",[error description]);
     }
     
     return player;
@@ -107,6 +118,51 @@
 
 -(BOOL)isValidIndex:(NSUInteger)index{
     return (index == 0 || index < self.players.count);
+}
+
+-(void)handleInterruption:(NSNotification *)notification {
+    NSDictionary *info = notification.userInfo;
+    
+    AVAudioSessionInterruptionType type = [[info objectForKey:AVAudioSessionInterruptionTypeKey] unsignedIntegerValue];
+    if (type == AVAudioSessionInterruptionTypeBegan) {
+        // handle AVAudioSessionInterruptionTypeBegan
+        [self stop];
+        if (self.delegate) {
+            [self.delegate playbackStopped];
+        }
+    }else{
+        // handle AVAudioSessionInterruptionTypeEnded
+        AVAudioSessionInterruptionOptions options = [info[AVAudioSessionInterruptionOptionKey] unsignedIntegerValue];
+        if (options == AVAudioSessionInterruptionOptionShouldResume) {
+            [self play];
+            if (self.delegate) {
+                [self.delegate playbackBegan];
+            }
+        }
+    }
+}
+
+-(void)handleRouteChange:(NSNotification *)notification {
+    NSDictionary *routeInfo = notification.userInfo;
+    
+    AVAudioSessionRouteChangeReason reason = [routeInfo[AVAudioSessionRouteChangeReasonKey] unsignedIntegerValue];
+    
+    if (reason == AVAudioSessionRouteChangeReasonOldDeviceUnavailable) {
+        AVAudioSessionRouteDescription *previousRoute = routeInfo[AVAudioSessionRouteChangePreviousRouteKey];
+        
+        AVAudioSessionPortDescription *previousOutput = previousRoute.outputs.firstObject;
+        
+        NSString *portType = previousOutput.portType;
+        
+        if ([portType isEqualToString:AVAudioSessionPortHeadphones]) {
+            [self stop];
+            [self.delegate playbackStopped];
+        }
+    }
+}
+
+-(void)dealloc{
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 @end
