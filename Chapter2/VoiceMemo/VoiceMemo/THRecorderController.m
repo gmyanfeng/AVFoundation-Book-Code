@@ -34,6 +34,7 @@
 @property (strong, nonatomic) AVAudioPlayer *player;
 @property (strong, nonatomic) AVAudioRecorder *recorder;
 @property (strong, nonatomic) THRecordingStopCompletionHandler completionHandler;
+@property (strong, nonatomic) THMeterTable *meterTable;
 
 @end
 
@@ -61,6 +62,8 @@
         }else{
             NSLog(@"error: %@",[error localizedDescription]);
         }
+        
+        _meterTable = [[THMeterTable alloc] init];
     }
     return self;
 }
@@ -103,7 +106,13 @@
 }
 
 - (THLevelPair *)levels {
-    return nil;
+    [self.recorder updateMeters];
+    float avgPower = [self.recorder averagePowerForChannel:0];
+    float peakPower = [self.recorder peakPowerForChannel:0];
+    float linearLevel = [self.meterTable valueForPower:avgPower];
+    float linearPeak = [self.meterTable valueForPower:peakPower];
+    
+    return [THLevelPair levelsWithLevel:linearLevel peakLevel:linearPeak];
 }
 
 - (NSString *)formattedCurrentTime {
